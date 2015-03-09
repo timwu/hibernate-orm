@@ -58,6 +58,10 @@ public class EhcacheAccessStrategyFactoryImpl implements EhcacheAccessStrategyFa
 				}
 				return new ReadOnlyEhcacheEntityRegionAccessStrategy( entityRegion, entityRegion.getSettings() );
 			case READ_WRITE:
+				if ( entityRegion.getEhcache().getCacheConfiguration().isTerracottaClustered() &&
+						entityRegion.getEhcache().getCacheConfiguration().getTerracottaConfiguration().isNonstopEnabled()) {
+					throw new IllegalArgumentException();
+				}
 				return new ReadWriteEhcacheEntityRegionAccessStrategy( entityRegion, entityRegion.getSettings() );
 
 			case NONSTRICT_READ_WRITE:
