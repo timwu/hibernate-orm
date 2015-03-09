@@ -90,7 +90,6 @@ public class EhCacheRegionFactory extends AbstractEhcacheRegionFactory {
 				final Configuration configuration = HibernateEhcacheUtils.loadAndCorrectConfiguration( url );
 				manager = new CacheManager( configuration );
 			}
-			mbeanRegistrationHelper.registerMBean( manager, properties );
 		}
 		catch (net.sf.ehcache.CacheException e) {
 			if ( e.getMessage().startsWith(
@@ -113,7 +112,6 @@ public class EhCacheRegionFactory extends AbstractEhcacheRegionFactory {
 	public void stop() {
 		try {
 			if ( manager != null ) {
-				mbeanRegistrationHelper.unregisterMBean();
 				manager.shutdown();
 				manager = null;
 			}

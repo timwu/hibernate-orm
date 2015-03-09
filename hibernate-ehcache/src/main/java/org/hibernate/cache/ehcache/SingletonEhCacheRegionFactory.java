@@ -101,7 +101,6 @@ public class SingletonEhCacheRegionFactory extends AbstractEhcacheRegionFactory 
 				manager = CacheManager.create( configuration );
 				REFERENCE_COUNT.incrementAndGet();
 			}
-			mbeanRegistrationHelper.registerMBean( manager, properties );
 		}
 		catch (net.sf.ehcache.CacheException e) {
 			throw new CacheException( e );

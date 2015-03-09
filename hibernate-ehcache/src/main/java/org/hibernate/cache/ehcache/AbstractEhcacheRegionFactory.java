@@ -41,7 +41,6 @@ import org.hibernate.cache.ehcache.internal.regions.EhcacheTimestampsRegion;
 import org.hibernate.cache.ehcache.internal.strategy.EhcacheAccessStrategyFactory;
 import org.hibernate.cache.ehcache.internal.strategy.EhcacheAccessStrategyFactoryImpl;
 import org.hibernate.cache.ehcache.internal.util.HibernateEhcacheUtils;
-import org.hibernate.cache.ehcache.management.impl.ProviderMBeanRegistrationHelper;
 import org.hibernate.cache.spi.CacheDataDescription;
 import org.hibernate.cache.spi.CollectionRegion;
 import org.hibernate.cache.spi.EntityRegion;
@@ -79,11 +78,6 @@ abstract class AbstractEhcacheRegionFactory implements RegionFactory {
 			EhCacheMessageLogger.class,
 			AbstractEhcacheRegionFactory.class.getName()
 	);
-
-	/**
-	 * MBean registration helper class instance for Ehcache Hibernate MBeans.
-	 */
-	protected final ProviderMBeanRegistrationHelper mbeanRegistrationHelper = new ProviderMBeanRegistrationHelper();
 
 	/**
 	 * Ehcache CacheManager that supplied Ehcache instances for this Hibernate RegionFactory.
