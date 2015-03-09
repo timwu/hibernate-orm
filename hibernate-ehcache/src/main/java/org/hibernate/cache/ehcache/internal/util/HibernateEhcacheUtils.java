@@ -31,7 +31,6 @@ import net.sf.ehcache.config.Configuration;
 import net.sf.ehcache.config.ConfigurationFactory;
 import net.sf.ehcache.config.NonstopConfiguration;
 import net.sf.ehcache.config.TerracottaConfiguration;
-import net.sf.ehcache.config.TerracottaConfiguration.ValueMode;
 import net.sf.ehcache.config.TimeoutBehaviorConfiguration.TimeoutBehaviorType;
 
 import org.hibernate.cache.CacheException;
@@ -76,13 +75,6 @@ public final class HibernateEhcacheUtils {
 		
 		if ( config.getDefaultCacheConfiguration() != null
 				&& config.getDefaultCacheConfiguration().isTerracottaClustered() ) {
-			if ( ValueMode.IDENTITY
-					.equals( config.getDefaultCacheConfiguration().getTerracottaConfiguration().getValueMode() ) ) {
-				LOG.incompatibleCacheValueMode();
-				config.getDefaultCacheConfiguration()
-						.getTerracottaConfiguration()
-						.setValueMode( ValueMode.SERIALIZATION.name() );
-			}
 			setupHibernateTimeoutBehavior(
 					config.getDefaultCacheConfiguration()
 							.getTerracottaConfiguration()
@@ -92,10 +84,6 @@ public final class HibernateEhcacheUtils {
 
 		for ( CacheConfiguration cacheConfig : config.getCacheConfigurations().values() ) {
 			if ( cacheConfig.isTerracottaClustered() ) {
-				if ( ValueMode.IDENTITY.equals( cacheConfig.getTerracottaConfiguration().getValueMode() ) ) {
-					LOG.incompatibleCacheValueModePerCache( cacheConfig.getName() );
-					cacheConfig.getTerracottaConfiguration().setValueMode( ValueMode.SERIALIZATION.name() );
-				}
 				setupHibernateTimeoutBehavior( cacheConfig.getTerracottaConfiguration().getNonstopConfiguration() );
 			}
 		}
@@ -114,23 +102,5 @@ public final class HibernateEhcacheUtils {
 	 * @throws CacheException If any explicit settings on the cache are not validate
 	 */
 	public static void validateEhcache(Ehcache cache) throws CacheException {
-		final CacheConfiguration cacheConfig = cache.getCacheConfiguration();
-
-		if ( cacheConfig.isTerracottaClustered() ) {
-			final TerracottaConfiguration tcConfig = cacheConfig.getTerracottaConfiguration();
-			switch ( tcConfig.getValueMode() ) {
-				case IDENTITY: {
-					throw new CacheException(
-							"The clustered Hibernate cache " + cache.getName() + " is using IDENTITY value mode.\n"
-									+ "Identity value mode cannot be used with Hibernate cache regions."
-					);
-				}
-				case SERIALIZATION:
-				default: {
-					// this is the recommended valueMode
-					break;
-				}
-			}
-		}
 	}
 }

@@ -1,6 +1,9 @@
 package org.hibernate.test.cache;
 
 import net.sf.ehcache.CacheManager;
+
+import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -15,10 +18,11 @@ import static org.junit.Assert.assertThat;
 public class EhcacheStatsImplTest {
 
 	private static EhcacheStatsImpl stats;
+	private static CacheManager manager;
 
 	@BeforeClass
 	public static void createCache() throws Exception {
-		CacheManager manager = CacheManager.getInstance();
+		manager = CacheManager.getInstance();
 		stats = new EhcacheStatsImpl( manager );
 	}
 
@@ -30,5 +34,10 @@ public class EhcacheStatsImplTest {
 	@Test
 	public void testGetRegionCacheOrphanEvictionPeriod() {
 		assertThat( stats.getRegionCacheOrphanEvictionPeriod( "sampleCache1" ), is( -1 ) );
+	}
+
+	@AfterClass
+	public static void destroyCache() {
+		manager.shutdown();
 	}
 }

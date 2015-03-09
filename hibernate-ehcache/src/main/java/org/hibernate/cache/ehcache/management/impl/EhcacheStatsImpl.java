@@ -26,6 +26,7 @@ package org.hibernate.cache.ehcache.management.impl;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import javax.management.MBeanNotificationInfo;
 import javax.management.NotCompliantMBeanException;
 import javax.management.Notification;
@@ -73,27 +74,6 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 	}
 
 	@Override
-	public boolean isStatisticsEnabled() {
-		return false;
-	}
-
-	@Override
-	public void clearStats() {
-		sampledCacheManager.clearStatistics();
-		statsSince = System.currentTimeMillis();
-	}
-
-	@Override
-	public void disableStats() {
-		setStatisticsEnabled( false );
-	}
-
-	@Override
-	public void enableStats() {
-		setStatisticsEnabled( true );
-	}
-
-	@Override
 	public void flushRegionCache(String region) {
 		final Cache cache = this.cacheManager.getCache( region );
 		if ( cache != null ) {
@@ -127,7 +107,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 		for ( String name : cacheManager.getCacheNames() ) {
 			final Cache cache = cacheManager.getCache( name );
 			if ( cache != null ) {
-				count += cache.getLiveCacheStatistics().getCacheHitCount();
+				count += cache.getStatistics().cacheHitCount();
 			}
 		}
 		return count;
@@ -146,7 +126,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 		for ( String name : cacheManager.getCacheNames() ) {
 			final Cache cache = cacheManager.getCache( name );
 			if ( cache != null ) {
-				count += cache.getSampledCacheStatistics().getCacheHitMostRecentSample();
+				count += cache.getStatistics().cacheHitOperation().rate().value().longValue();
 			}
 		}
 		return count;
@@ -158,7 +138,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 		for ( String name : cacheManager.getCacheNames() ) {
 			final Cache cache = cacheManager.getCache( name );
 			if ( cache != null ) {
-				count += cache.getLiveCacheStatistics().getCacheMissCount();
+				count += cache.getStatistics().cacheMissCount();
 			}
 		}
 		return count;
@@ -177,7 +157,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 		for ( String name : cacheManager.getCacheNames() ) {
 			final Cache cache = cacheManager.getCache( name );
 			if ( cache != null ) {
-				count += cache.getSampledCacheStatistics().getCacheMissMostRecentSample();
+				count += cache.getStatistics().cacheMissOperation().rate().value().longValue();
 			}
 		}
 		return count;
@@ -189,7 +169,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 		for ( String name : cacheManager.getCacheNames() ) {
 			final Cache cache = cacheManager.getCache( name );
 			if ( cache != null ) {
-				count += cache.getLiveCacheStatistics().getPutCount();
+				count += cache.getStatistics().cachePutCount();
 			}
 		}
 		return count;
@@ -208,7 +188,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 		for ( String name : cacheManager.getCacheNames() ) {
 			final Cache cache = cacheManager.getCache( name );
 			if ( cache != null ) {
-				count += cache.getSampledCacheStatistics().getCacheElementPutMostRecentSample();
+				count += cache.getStatistics().cachePutOperation().rate().value().longValue();
 			}
 		}
 		return count;
@@ -288,10 +268,10 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 			if ( cache != null ) {
 				rv.put(
 						name, new int[] {
-						(int) cache.getSampledCacheStatistics().getCacheHitMostRecentSample(),
-						(int) (cache.getSampledCacheStatistics().getCacheMissNotFoundMostRecentSample()
-								+ cache.getSampledCacheStatistics().getCacheMissExpiredMostRecentSample()),
-						(int) cache.getSampledCacheStatistics().getCacheElementPutMostRecentSample(),
+								cache.getStatistics().cacheHitOperation().rate().value().intValue(),
+								cache.getStatistics().cacheMissExpiredOperation().rate().value().intValue() +
+										cache.getStatistics().cacheMissNotFoundOperation().rate().value().intValue(),
+								cache.getStatistics().cachePutOperation().rate().value().intValue(),
 				}
 				);
 			}
@@ -473,27 +453,10 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 	}
 
 	@Override
-	public void setStatisticsEnabled(boolean flag) {
-		for ( String cacheName : cacheManager.getCacheNames() ) {
-			final Cache cache = cacheManager.getCache( cacheName );
-			if ( cache != null ) {
-				cache.setStatisticsEnabled( flag );
-			}
-		}
-		if ( flag ) {
-			clearStats();
-		}
-		sendNotification( CACHE_STATISTICS_ENABLED, flag );
-	}
-
-	@Override
 	public long getMaxGetTimeMillis() {
 		long rv = 0;
 		for ( String cacheName : cacheManager.getCacheNames() ) {
-			final Cache cache = cacheManager.getCache( cacheName );
-			if ( cache != null ) {
-				rv = Math.max( rv, cache.getLiveCacheStatistics().getMaxGetTimeMillis() );
-			}
+			rv = Math.max( rv, getMaxGetTimeMillis( cacheName ) );
 		}
 		return rv;
 	}
@@ -502,10 +465,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 	public long getMinGetTimeMillis() {
 		long rv = 0;
 		for ( String cacheName : cacheManager.getCacheNames() ) {
-			final Cache cache = cacheManager.getCache( cacheName );
-			if ( cache != null ) {
-				rv = Math.max( rv, cache.getLiveCacheStatistics().getMinGetTimeMillis() );
-			}
+			rv = Math.min( rv, getMinGetTimeMillis( cacheName ) );
 		}
 		return rv;
 	}
@@ -514,7 +474,13 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 	public long getMaxGetTimeMillis(String cacheName) {
 		final Cache cache = cacheManager.getCache( cacheName );
 		if ( cache != null ) {
-			return cache.getLiveCacheStatistics().getMaxGetTimeMillis();
+			return TimeUnit.NANOSECONDS.toMillis(
+					cache.getStatistics()
+							.cacheGetOperation()
+							.latency()
+							.maximum()
+							.value()
+			);
 		}
 		else {
 			return 0;
@@ -525,7 +491,13 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 	public long getMinGetTimeMillis(String cacheName) {
 		final Cache cache = cacheManager.getCache( cacheName );
 		if ( cache != null ) {
-			return cache.getLiveCacheStatistics().getMinGetTimeMillis();
+			return TimeUnit.NANOSECONDS.toMillis(
+					cache.getStatistics()
+							.cacheGetOperation()
+							.latency()
+							.minimum()
+							.value()
+			);
 		}
 		else {
 			return 0;
@@ -536,7 +508,7 @@ public class EhcacheStatsImpl extends AbstractEmitterBean implements EhcacheStat
 	public float getAverageGetTimeMillis(String region) {
 		final Cache cache = this.cacheManager.getCache( region );
 		if ( cache != null ) {
-			return cache.getLiveCacheStatistics().getAverageGetTimeMillis();
+			return cache.getStatistics().cacheGetOperation().latency().average().value().floatValue();
 		}
 		else {
 			return -1f;
