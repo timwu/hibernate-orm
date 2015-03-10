@@ -23,15 +23,11 @@
  */
 package org.hibernate.cache.ehcache;
 
-import java.net.URL;
 import java.util.Properties;
 
 import net.sf.ehcache.CacheManager;
-import net.sf.ehcache.config.Configuration;
-import net.sf.ehcache.config.ConfigurationFactory;
 
 import org.hibernate.cache.CacheException;
-import org.hibernate.cache.ehcache.internal.util.HibernateEhcacheUtils;
 import org.hibernate.cfg.Settings;
 
 import org.jboss.logging.Logger;
@@ -69,27 +65,14 @@ public class EhCacheRegionFactory extends AbstractEhcacheRegionFactory {
 	}
 
 	@Override
-	public void start(Settings settings, Properties properties) throws CacheException {
-		this.settings = settings;
+	public void doStart(Settings settings, Properties properties) throws CacheException {
 		if ( manager != null ) {
 			LOG.attemptToRestartAlreadyStartedEhCacheProvider();
 			return;
 		}
 
 		try {
-			String configurationResourceName = null;
-			if ( properties != null ) {
-				configurationResourceName = (String) properties.get( NET_SF_EHCACHE_CONFIGURATION_RESOURCE_NAME );
-			}
-			if ( configurationResourceName == null || configurationResourceName.length() == 0 ) {
-				final Configuration configuration = ConfigurationFactory.parseConfiguration();
-				manager = new CacheManager( configuration );
-			}
-			else {
-				final URL url = loadResource( configurationResourceName );
-				final Configuration configuration = HibernateEhcacheUtils.loadAndCorrectConfiguration( url );
-				manager = new CacheManager( configuration );
-			}
+			manager = new CacheManager( getConfiguration( properties ) );
 		}
 		catch (net.sf.ehcache.CacheException e) {
 			if ( e.getMessage().startsWith(

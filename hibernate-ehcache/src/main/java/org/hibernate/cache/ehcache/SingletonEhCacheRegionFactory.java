@@ -23,16 +23,12 @@
  */
 package org.hibernate.cache.ehcache;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import net.sf.ehcache.CacheManager;
-import net.sf.ehcache.config.Configuration;
 
 import org.hibernate.cache.CacheException;
-import org.hibernate.cache.ehcache.internal.util.HibernateEhcacheUtils;
 import org.hibernate.cfg.Settings;
 
 import org.jboss.logging.Logger;
@@ -71,36 +67,10 @@ public class SingletonEhCacheRegionFactory extends AbstractEhcacheRegionFactory 
 	}
 
 	@Override
-	public void start(Settings settings, Properties properties) throws CacheException {
-		this.settings = settings;
+	public void doStart(Settings settings, Properties properties) throws CacheException {
 		try {
-			String configurationResourceName = null;
-			if ( properties != null ) {
-				configurationResourceName = (String) properties.get( NET_SF_EHCACHE_CONFIGURATION_RESOURCE_NAME );
-			}
-			if ( configurationResourceName == null || configurationResourceName.length() == 0 ) {
-				manager = CacheManager.create();
-				REFERENCE_COUNT.incrementAndGet();
-			}
-			else {
-				URL url;
-				try {
-					url = new URL( configurationResourceName );
-				}
-				catch (MalformedURLException e) {
-					if ( !configurationResourceName.startsWith( "/" ) ) {
-						configurationResourceName = "/" + configurationResourceName;
-						LOG.debugf(
-								"prepending / to %s. It should be placed in the root of the classpath rather than in a package.",
-								configurationResourceName
-						);
-					}
-					url = loadResource( configurationResourceName );
-				}
-				final Configuration configuration = HibernateEhcacheUtils.loadAndCorrectConfiguration( url );
-				manager = CacheManager.create( configuration );
-				REFERENCE_COUNT.incrementAndGet();
-			}
+			manager = CacheManager.create( getConfiguration( properties ) );
+			REFERENCE_COUNT.incrementAndGet();
 		}
 		catch (net.sf.ehcache.CacheException e) {
 			throw new CacheException( e );

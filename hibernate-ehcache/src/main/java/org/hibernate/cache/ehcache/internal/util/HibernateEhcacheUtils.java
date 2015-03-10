@@ -56,21 +56,19 @@ public final class HibernateEhcacheUtils {
 	}
 
 	/**
-	 * Create a cache manager configuration from the supplied url, correcting it for Hibernate compatibility.
+	 * Correct the given Configuration for Hibernate compatibility.
 	 * <p/>
 	 * Currently "correcting" for Hibernate compatibility means simply switching any identity based value modes
 	 * to serialization.
 	 *
-	 * @param url The url to load the config from
 	 *
-	 * @return The Ehcache Configuration object
+	 * @param config @return The Ehcache Configuration object
 	 */
-	public static Configuration loadAndCorrectConfiguration(URL url) {
-		final Configuration config = ConfigurationFactory.parseConfiguration( url );
+	public static void correctConfiguration(Configuration config) {
 		
 		// EHC-875 / HHH-6576
 		if ( config == null ) {
-			return null;
+			return;
 		}
 		
 		if ( config.getDefaultCacheConfiguration() != null
@@ -87,7 +85,6 @@ public final class HibernateEhcacheUtils {
 				setupHibernateTimeoutBehavior( cacheConfig.getTerracottaConfiguration().getNonstopConfiguration() );
 			}
 		}
-		return config;
 	}
 
 	private static void setupHibernateTimeoutBehavior(NonstopConfiguration nonstopConfig) {

@@ -23,6 +23,8 @@
  */
 package org.hibernate.cache.ehcache.internal.strategy;
 
+import net.sf.ehcache.config.CacheConfiguration;
+
 import org.hibernate.cache.ehcache.EhCacheMessageLogger;
 import org.hibernate.cache.ehcache.internal.regions.EhcacheCollectionRegion;
 import org.hibernate.cache.ehcache.internal.regions.EhcacheEntityRegion;
@@ -33,6 +35,8 @@ import org.hibernate.cache.spi.access.EntityRegionAccessStrategy;
 import org.hibernate.cache.spi.access.NaturalIdRegionAccessStrategy;
 
 import org.jboss.logging.Logger;
+
+import static net.sf.ehcache.config.TerracottaConfiguration.Consistency.EVENTUAL;
 
 /**
  * Class implementing {@link EhcacheAccessStrategyFactory}
@@ -46,11 +50,20 @@ public class EhcacheAccessStrategyFactoryImpl implements EhcacheAccessStrategyFa
 			EhCacheMessageLogger.class,
 			EhcacheAccessStrategyFactoryImpl.class.getName()
 	);
+	
+	private final boolean alwaysAllowNonstop;
+	private final boolean allowRacyConfigs;
+
+	public EhcacheAccessStrategyFactoryImpl(boolean alwaysAllowNonstop, boolean allowRacyConfigs) {
+		this.alwaysAllowNonstop = alwaysAllowNonstop;
+		this.allowRacyConfigs = allowRacyConfigs;
+	}
 
 	@Override
 	public EntityRegionAccessStrategy createEntityRegionAccessStrategy(
 			EhcacheEntityRegion entityRegion,
 			AccessType accessType) {
+		checkAccessTypeCompatibility( accessType, entityRegion.getEhcache().getCacheConfiguration() );
 		switch ( accessType ) {
 			case READ_ONLY:
 				if ( entityRegion.getCacheDataDescription().isMutable() ) {
@@ -58,10 +71,6 @@ public class EhcacheAccessStrategyFactoryImpl implements EhcacheAccessStrategyFa
 				}
 				return new ReadOnlyEhcacheEntityRegionAccessStrategy( entityRegion, entityRegion.getSettings() );
 			case READ_WRITE:
-				if ( entityRegion.getEhcache().getCacheConfiguration().isTerracottaClustered() &&
-						entityRegion.getEhcache().getCacheConfiguration().getTerracottaConfiguration().isNonstopEnabled()) {
-					throw new IllegalArgumentException();
-				}
 				return new ReadWriteEhcacheEntityRegionAccessStrategy( entityRegion, entityRegion.getSettings() );
 
 			case NONSTRICT_READ_WRITE:
@@ -87,6 +96,7 @@ public class EhcacheAccessStrategyFactoryImpl implements EhcacheAccessStrategyFa
 	public CollectionRegionAccessStrategy createCollectionRegionAccessStrategy(
 			EhcacheCollectionRegion collectionRegion,
 			AccessType accessType) {
+		checkAccessTypeCompatibility( accessType, collectionRegion.getEhcache().getCacheConfiguration() );
 		switch ( accessType ) {
 			case READ_ONLY:
 				if ( collectionRegion.getCacheDataDescription().isMutable() ) {
@@ -120,6 +130,7 @@ public class EhcacheAccessStrategyFactoryImpl implements EhcacheAccessStrategyFa
 	public NaturalIdRegionAccessStrategy createNaturalIdRegionAccessStrategy(
 			EhcacheNaturalIdRegion naturalIdRegion,
 			AccessType accessType) {
+		checkAccessTypeCompatibility( accessType, naturalIdRegion.getEhcache().getCacheConfiguration() );
 		switch ( accessType ) {
 			case READ_ONLY:
 				if ( naturalIdRegion.getCacheDataDescription().isMutable() ) {
@@ -149,5 +160,27 @@ public class EhcacheAccessStrategyFactoryImpl implements EhcacheAccessStrategyFa
 		}
 	}
 
+	protected void checkAccessTypeCompatibility(AccessType accessType, CacheConfiguration cacheConfiguration) {
+		switch ( accessType ) {
+			case READ_ONLY:
+			case NONSTRICT_READ_WRITE:
+				break;
+			case READ_WRITE:
+				if ( cacheConfiguration.isTerracottaClustered()) {
+					if (!allowRacyConfigs && EVENTUAL == cacheConfiguration.getTerracottaConfiguration().getConsistency()) {
+						throw new IllegalArgumentException( "Using an eventual clustered cache with " + AccessType.READ_WRITE + "  access type is not supported." );
+					}
+					if (!alwaysAllowNonstop && cacheConfiguration.getTerracottaConfiguration().isNonstopEnabled()) {
+						throw new IllegalArgumentException( "Using a non-stop clustered cache with " + AccessType.READ_WRITE + " access type is not supported." );
+					}
+				}
+				break;
+			case TRANSACTIONAL:
+				if ( !cacheConfiguration.isXaStrictTransactional() && !cacheConfiguration.isXaTransactional()) {
+					throw new IllegalArgumentException( AccessType.TRANSACTIONAL + " access is only supported with XA transactional caches." );
+				}
+				break;
+		}
 
+	}
 }

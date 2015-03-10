@@ -29,6 +29,8 @@ import java.util.Properties;
 
 import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Ehcache;
+import net.sf.ehcache.config.Configuration;
+import net.sf.ehcache.config.ConfigurationFactory;
 
 import org.hibernate.boot.registry.classloading.spi.ClassLoaderService;
 import org.hibernate.cache.CacheException;
@@ -73,6 +75,8 @@ abstract class AbstractEhcacheRegionFactory implements RegionFactory {
 	 * If set to say ehcache-1.xml, ehcache-1.xml will be looked for in the root of the classpath.
 	 */
 	public static final String NET_SF_EHCACHE_CONFIGURATION_RESOURCE_NAME = "net.sf.ehcache.configurationResourceName";
+	public static final String NET_SF_EHCACHE_ALWAYS_ALLOW_NONSTOP = "net.sf.ehcache.alwaysAllowNonstop";
+	public static final String NET_SF_EHCACHE_ALLOW_RACY_EVENTUAL_CONFIGS = "net.sf.ehcache.allowRacyEventualConfigs";
 
 	private static final EhCacheMessageLogger LOG = Logger.getMessageLogger(
 			EhCacheMessageLogger.class,
@@ -92,8 +96,7 @@ abstract class AbstractEhcacheRegionFactory implements RegionFactory {
 	/**
 	 * {@link EhcacheAccessStrategyFactory} for creating various access strategies
 	 */
-	protected final EhcacheAccessStrategyFactory accessStrategyFactory =
-			new NonstopAccessStrategyFactory( new EhcacheAccessStrategyFactoryImpl() );
+	protected volatile EhcacheAccessStrategyFactory accessStrategyFactory;
 
 	/**
 	 * {@inheritDoc}
@@ -233,4 +236,60 @@ abstract class AbstractEhcacheRegionFactory implements RegionFactory {
 	public AccessType getDefaultAccessType() {
 		return AccessType.READ_WRITE;
 	}
+
+	@Override
+	public final void start(Settings settings, Properties properties) throws CacheException {
+		this.settings = settings;
+
+		getConfiguration( properties );
+
+		boolean alwaysAllowNonstop = Boolean.valueOf( properties.getProperty( NET_SF_EHCACHE_ALWAYS_ALLOW_NONSTOP, "false" ) );
+		boolean allowRacyConfigs = Boolean.valueOf(
+				properties.getProperty(
+						NET_SF_EHCACHE_ALLOW_RACY_EVENTUAL_CONFIGS,
+						"false"
+				)
+		);
+
+		accessStrategyFactory = new NonstopAccessStrategyFactory(
+				new EhcacheAccessStrategyFactoryImpl(
+						alwaysAllowNonstop,
+						allowRacyConfigs
+				)
+		);
+		
+		doStart( settings, properties );
+	}
+
+	protected Configuration getConfiguration(Properties properties) {
+		String configurationResourceName = null;
+		if ( properties != null ) {
+			configurationResourceName = (String) properties.get( NET_SF_EHCACHE_CONFIGURATION_RESOURCE_NAME );
+		}
+		Configuration configuration;
+		if (configurationResourceName == null || "".equals( configurationResourceName.trim() )) {
+			configuration = ConfigurationFactory.parseConfiguration();
+		} else {
+			URL url;
+			try {
+				url = new URL( configurationResourceName );
+			}
+			catch (MalformedURLException e) {
+				if ( !configurationResourceName.startsWith( "/" ) ) {
+					configurationResourceName = "/" + configurationResourceName;
+					LOG.debugf(
+							"prepending / to %s. It should be placed in the root of the classpath rather than in a package.",
+							configurationResourceName
+					);
+				}
+				url = loadResource( configurationResourceName );
+			}
+			configuration = ConfigurationFactory.parseConfiguration( url );
+		}
+		HibernateEhcacheUtils.correctConfiguration( configuration );
+		return configuration;
+	}
+
+	protected abstract void doStart(Settings settings, Properties properties) throws CacheException;
+
 }
